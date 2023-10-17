@@ -9,7 +9,7 @@ async function main() {
   });
 
   const response = await notion.databases.query({
-    database_id: "FIXME",
+    database_id: process.env.NOTION_INTCUBE_PROJECT_DB!,
   });
 
   console.log("Got response:", response);
