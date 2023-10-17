@@ -1,4 +1,4 @@
-import { Client } from "@notionhq/client";
+import { Client as NotionClient } from "@notionhq/client";
 import { Client as HubspotClient } from "@hubspot/api-client";
 
 import dotenv from "dotenv";
@@ -6,7 +6,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 async function main() {
-  const notion = new Client({
+  const notion = new NotionClient({
     auth: process.env.NOTION_TOKEN,
   });
   const hubspot = new HubspotClient({
