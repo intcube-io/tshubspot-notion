@@ -8,11 +8,11 @@ async function main() {
     auth: process.env.NOTION_TOKEN,
   });
 
-  const response = await notion.databases.query({
+  const notionProjectDb = await notion.databases.query({
     database_id: process.env.NOTION_INTCUBE_PROJECT_DB!,
   });
+  console.log("Got response:", notionProjectDb);
 
-  console.log("Got response:", response);
 }
 
 main()
