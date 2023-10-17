@@ -13,14 +13,32 @@ async function main() {
     accessToken: process.env.HUBSPOT_API_KEY,
   });
 
+  const notionProjectDbId = process.env.NOTION_INTCUBE_PROJECT_DB!;
   const notionProjectDb = await notion.databases.query({
-    database_id: process.env.NOTION_INTCUBE_PROJECT_DB!,
+    database_id: notionProjectDbId,
   });
   console.log("Got response:", notionProjectDb);
 
-  const allDeals = await hubspot.crm.deals.getAll()
+  const allDeals = await hubspot.crm.deals.getAll();
   for (let deal of allDeals) {
-    console.log(deal)
+    console.log(deal);
+    const r = await notion.pages.create({
+      parent: {
+        type: "database_id",
+        database_id: notionProjectDbId,
+      },
+      properties: {
+        Name: {
+          title: [
+            {
+              text: {
+                content: deal.properties.dealname!,
+              },
+            },
+          ],
+        },
+      },
+    });
   }
 }
 
