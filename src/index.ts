@@ -35,10 +35,10 @@ async function main() {
     }
   });
 
+  console.log('Querying Notion project DB rows.')
   const notionProjectDb = await notion.databases.query({
     database_id: notionProjectDbId,
   });
-  console.log("Got response:", notionProjectDb);
 
   const allDeals = await hubspot.crm.deals.getAll();
   for (let deal of allDeals) {
