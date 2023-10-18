@@ -104,25 +104,70 @@ async function main() {
     mapDealToPage[dealId] = dealPage.id;
   }
 
+  console.log('Updating/creating Notion DB entries from Hubspot deals.')
   for (let deal of allDeals) {
-    console.log(deal);
-    const r = await notion.pages.create({
-      parent: {
-        type: "database_id",
-        database_id: notionProjectDbId,
-      },
-      properties: {
-        Name: {
-          title: [
-            {
-              text: {
-                content: deal.properties.dealname!,
-              },
+    const page = mapDealToPage[deal.id];
+    /* TODO: how to use this below? */
+    const the_properties = {
+      Name: {
+        title: [
+          {
+            text: {
+              content: deal.properties.dealname!,
             },
-          ],
-        },
+          },
+        ],
       },
-    });
+      hubspot_deal_id: {
+        type: "url",
+        url: hubspotDealIdToURL(HUBSPOT_PORTAL_ID, deal.id),
+      },
+    };
+
+    if (page) {
+      console.log('Updating deal', deal.id)
+      const r = await notion.pages.update({
+        page_id: page,
+        properties: {
+          Name: {
+            title: [
+              {
+                text: {
+                  content: deal.properties.dealname!,
+                },
+              },
+            ],
+          },
+          hubspot_deal_id: {
+            type: "url",
+            url: hubspotDealIdToURL(HUBSPOT_PORTAL_ID, deal.id),
+          },
+        },
+      });
+    } else {
+      console.log('Creating deal', deal.id)
+      const r = await notion.pages.create({
+        parent: {
+          type: "database_id",
+          database_id: notionProjectDbId,
+        },
+        properties: {
+          Name: {
+            title: [
+              {
+                text: {
+                  content: deal.properties.dealname!,
+                },
+              },
+            ],
+          },
+          hubspot_deal_id: {
+            type: "url",
+            url: hubspotDealIdToURL(HUBSPOT_PORTAL_ID, deal.id),
+          },
+        },
+      });
+    }
   }
 }
 
