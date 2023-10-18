@@ -14,6 +14,27 @@ async function main() {
   });
 
   const notionProjectDbId = process.env.NOTION_INTCUBE_PROJECT_DB!;
+
+  console.log('Ensuring/updating Notion DB schema.')
+  const notionProjectDbSchema = await notion.databases.update({
+    database_id: notionProjectDbId,
+    properties: {
+      Name: {
+        title: {}
+      },
+      /* Uses type Record<string, url-property>, where the key in the record
+       * must match the `name` in the url-property, otherwise this will be read
+       * as an "update name" request, updating any property matched by the key
+       * in the record to have the new name indicated by `name`.
+       */
+      hubspot_deal_id: {
+        type: "url",
+        name: "hubspot_deal_id",
+        url: {},
+      },
+    }
+  });
+
   const notionProjectDb = await notion.databases.query({
     database_id: notionProjectDbId,
   });
