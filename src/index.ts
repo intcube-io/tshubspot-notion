@@ -2,8 +2,38 @@ import { Client as NotionClient } from "@notionhq/client";
 import { Client as HubspotClient } from "@hubspot/api-client";
 
 import dotenv from "dotenv";
+import { assert } from "console";
 
 dotenv.config();
+
+// https://app.hubspot.com/contacts/{PORTAL_ID}/record/0-3/9162434779
+function hubspotDealIdToURL(portalId: string, dealId: string): string {
+  assert(/^[0-9]+$/.test(portalId), "hubspotDealIdToURL: invalid portalId: " + portalId);
+  assert(/^[0-9]+$/.test(dealId)), "hubspotDealIdToURL: invalid dealId: " + dealId;
+
+  const url = dealId.replace(
+    /([0-9]+)/g,
+    "https://app.hubspot.com/contacts/" + portalId + "/record/0-3/$1"
+  );
+  return url;
+}
+
+function hubspotUrlToId(portalId: string, url: string): string {
+  assert(/^[0-9]+$/.test(portalId), "hubspotDealIdToURL: invalid portalId: " + portalId);
+
+  const dealId = url.replace(
+    /^https:\/\/app.hubspot.com\/contacts\/[0-9]+\/record\/0-3\/([0-9]+$)/g,
+    "$1"
+  );
+  const _portalId = url.replace(
+    /^https:\/\/app.hubspot.com\/contacts\/([0-9]+)\/record\/0-3\/[0-9]+$/g,
+    "$1"
+  );
+  assert(portalId === _portalId, "hubspotDealIdToURL: portalId from URL '"+portalId+"'doesn't match expected portalId'"+_portalId+"'");
+  assert(/^[0-9]+$/.test(dealId), "hubspotDealIdToURL: invalid dealId: " + dealId);
+
+  return dealId;
+}
 
 async function main() {
   const notion = new NotionClient({
