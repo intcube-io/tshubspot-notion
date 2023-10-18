@@ -84,7 +84,7 @@ async function main() {
       !("properties" in dealPage) ||
       !("hubspot_deal_id" in dealPage.properties) ||
       !(dealPage.properties.hubspot_deal_id.type === "url") ||
-      !dealPage.properties.hubspot_deal_id.url
+      !(typeof dealPage.properties.hubspot_deal_id.url === 'string')
     ) {
       console.log(
         "Page",
