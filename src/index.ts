@@ -42,6 +42,7 @@ async function main() {
   const hubspot = new HubspotClient({
     accessToken: process.env.HUBSPOT_API_KEY,
   });
+  const HUBSPOT_PORTAL_ID = process.env.HUBSPOT_PORTAL_ID!;
 
   const notionProjectDbId = process.env.NOTION_INTCUBE_PROJECT_DB!;
 
@@ -70,7 +71,39 @@ async function main() {
     database_id: notionProjectDbId,
   });
 
+  console.log('Getting all Hubspot deals.')
   const allDeals = await hubspot.crm.deals.getAll();
+
+  console.log('Matching existing Notion DB entries to Hubspot deals.')
+  let mapDealToPage: { [id: string]: string } = {};
+  for (let dealPage of notionProjectDb.results) {
+    assert(dealPage.object === "page", "notionProjectdb object '"+dealPage.id+"' isn't a page: "+dealPage.object);
+
+    // hubspot_deal_id: { id: 'url', url: 'https://the.url' }
+    if (
+      !("properties" in dealPage) ||
+      !("hubspot_deal_id" in dealPage.properties) ||
+      !(dealPage.properties.hubspot_deal_id.type === "url") ||
+      !dealPage.properties.hubspot_deal_id.url
+    ) {
+      console.log(
+        "Page",
+        dealPage.id,
+        "has no readable & valid `hubspot_deal_id` URL property; archiving"
+      );
+      await notion.pages.update({
+        page_id: dealPage.id,
+        archived: true,
+      });
+      continue;
+    }
+    const dealId = hubspotUrlToId(
+      HUBSPOT_PORTAL_ID,
+      dealPage.properties.hubspot_deal_id.url
+    );
+    mapDealToPage[dealId] = dealPage.id;
+  }
+
   for (let deal of allDeals) {
     console.log(deal);
     const r = await notion.pages.create({
