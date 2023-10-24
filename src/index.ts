@@ -133,47 +133,48 @@ async function main() {
       : acc[1].push({ deal: deal });
     return acc;
   });
-  for (let deal of allDeals) {
-    const page = mapDealToPage[deal.id];
+
+  for (let page of pagesToUpdate) {
     /* TODO: how to use this below? */
     const the_properties = {
       Name: {
         title: [
           {
             text: {
-              content: deal.properties.dealname!,
+              content: page.deal.properties.dealname!,
             },
           },
         ],
       },
       hubspot_deal_id: {
         type: "url",
-        url: hubspotDealIdToURL(HUBSPOT_PORTAL_ID, deal.id),
+        url: hubspotDealIdToURL(HUBSPOT_PORTAL_ID, page.deal.id),
       },
     };
 
-    if (page) {
-      console.log("Updating deal", deal.id)
+      console.log("Updating deal", page.deal.id);
       const r = await notion.pages.update({
-        page_id: page,
+        page_id: page.pageId,
         properties: {
           Name: {
             title: [
               {
                 text: {
-                  content: deal.properties.dealname!,
+                  content: page.deal.properties.dealname!,
                 },
               },
             ],
           },
           hubspot_deal_id: {
             type: "url",
-            url: hubspotDealIdToURL(HUBSPOT_PORTAL_ID, deal.id),
+            url: hubspotDealIdToURL(HUBSPOT_PORTAL_ID, page.deal.id),
           },
         },
       });
-    } else {
-      console.log("Creating deal", deal.id)
+  }
+
+  for (let page of pagesToCreate) {
+      console.log("Creating deal", page.deal.id);
       const r = await notion.pages.create({
         parent: {
           type: "database_id",
@@ -184,18 +185,17 @@ async function main() {
             title: [
               {
                 text: {
-                  content: deal.properties.dealname!,
+                  content: page.deal.properties.dealname!,
                 },
               },
             ],
           },
           hubspot_deal_id: {
             type: "url",
-            url: hubspotDealIdToURL(HUBSPOT_PORTAL_ID, deal.id),
+            url: hubspotDealIdToURL(HUBSPOT_PORTAL_ID, page.deal.id),
           },
         },
       });
-    }
   }
 }
 
