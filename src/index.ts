@@ -3,6 +3,7 @@ import { Client as HubspotClient } from "@hubspot/api-client";
 
 import dotenv from "dotenv";
 import { assert } from "console";
+import { SimplePublicObjectWithAssociations } from "@hubspot/api-client/lib/codegen/crm/companies";
 
 dotenv.config();
 
@@ -111,6 +112,27 @@ async function main() {
   }
 
   console.log("Updating/creating Notion DB entries from Hubspot deals.");
+  // JS doesn't have a proper partitionWith, and lodash only _.partition.  We
+  // implement our own using tuples of arrays instead of the Either Monad.  Cf.
+  // Haskell:
+  //
+  //     getPageOrDealId = if (hasPage deal) then Left (deal, getPage deal) else Right deal
+  //     (pagesToUpdate, pagesToCreate) = partitionWith (getPageOrDealId) allDeals
+  const partitionWith = function <T, A, B>(
+    collection: T[],
+    decider: (acc: [A[], B[]], current: T) => [A[], B[]],
+  ): [A[], B[]] {
+    return collection.reduce(decider, [[], []]);
+  };
+  const [pagesToUpdate, pagesToCreate]: [
+    updatePage: { deal: SimplePublicObjectWithAssociations; pageId: string }[],
+    newPage: { deal: SimplePublicObjectWithAssociations }[],
+  ] = partitionWith(allDeals, (acc, deal) => {
+    mapDealToPage[deal.id]
+      ? acc[0].push({ pageId: mapDealToPage[deal.id], deal: deal })
+      : acc[1].push({ deal: deal });
+    return acc;
+  });
   for (let deal of allDeals) {
     const page = mapDealToPage[deal.id];
     /* TODO: how to use this below? */
