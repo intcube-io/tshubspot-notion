@@ -152,50 +152,50 @@ async function main() {
       },
     };
 
-      console.log("Updating deal", page.deal.id);
-      const r = await notion.pages.update({
-        page_id: page.pageId,
-        properties: {
-          Name: {
-            title: [
-              {
-                text: {
-                  content: page.deal.properties.dealname!,
-                },
+    console.log("Updating deal", page.deal.id);
+    const r = await notion.pages.update({
+      page_id: page.pageId,
+      properties: {
+        Name: {
+          title: [
+            {
+              text: {
+                content: page.deal.properties.dealname!,
               },
-            ],
-          },
-          hubspot_deal_id: {
-            type: "url",
-            url: hubspotDealIdToURL(HUBSPOT_PORTAL_ID, page.deal.id),
-          },
+            },
+          ],
         },
-      });
+        hubspot_deal_id: {
+          type: "url",
+          url: hubspotDealIdToURL(HUBSPOT_PORTAL_ID, page.deal.id),
+        },
+      },
+    });
   }
 
   for (let page of pagesToCreate) {
-      console.log("Creating deal", page.deal.id);
-      const r = await notion.pages.create({
-        parent: {
-          type: "database_id",
-          database_id: notionProjectDbId,
-        },
-        properties: {
-          Name: {
-            title: [
-              {
-                text: {
-                  content: page.deal.properties.dealname!,
-                },
+    console.log("Creating deal", page.deal.id);
+    const r = await notion.pages.create({
+      parent: {
+        type: "database_id",
+        database_id: notionProjectDbId,
+      },
+      properties: {
+        Name: {
+          title: [
+            {
+              text: {
+                content: page.deal.properties.dealname!,
               },
-            ],
-          },
-          hubspot_deal_id: {
-            type: "url",
-            url: hubspotDealIdToURL(HUBSPOT_PORTAL_ID, page.deal.id),
-          },
+            },
+          ],
         },
-      });
+        hubspot_deal_id: {
+          type: "url",
+          url: hubspotDealIdToURL(HUBSPOT_PORTAL_ID, page.deal.id),
+        },
+      },
+    });
   }
 }
 
