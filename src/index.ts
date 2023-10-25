@@ -1,5 +1,6 @@
 import { Client as NotionClient } from "@notionhq/client";
 import { Client as HubspotClient } from "@hubspot/api-client";
+import * as _ from "lodash";
 
 import dotenv from "dotenv";
 import { assert } from "console";
@@ -134,7 +135,11 @@ async function main() {
     return acc;
   });
 
-  for (let page of pagesToUpdate) {
+  const OPERATION_BATCH_SIZE = 10;
+  const pagesToUpdateChunked = _.chunk(pagesToUpdate, OPERATION_BATCH_SIZE);
+  for (let pageBatch of pagesToUpdateChunked) {
+    await Promise.all(
+      pageBatch.map((page) => {
     /* TODO: how to use this below? */
     const the_properties = {
       Name: {
@@ -153,7 +158,7 @@ async function main() {
     };
 
     console.log("Updating deal", page.deal.id);
-    const r = await notion.pages.update({
+    return notion.pages.update({
       page_id: page.pageId,
       properties: {
         Name: {
@@ -171,11 +176,16 @@ async function main() {
         },
       },
     });
+      }),
+    );
   }
 
-  for (let page of pagesToCreate) {
+  const pagesToCreateChunked = _.chunk(pagesToCreate, OPERATION_BATCH_SIZE);
+  for (let pageBatch of pagesToCreateChunked) {
+    await Promise.all(
+      pageBatch.map((page) => {
     console.log("Creating deal", page.deal.id);
-    const r = await notion.pages.create({
+    return notion.pages.create({
       parent: {
         type: "database_id",
         database_id: notionProjectDbId,
@@ -196,6 +206,8 @@ async function main() {
         },
       },
     });
+      }),
+    );
   }
 }
 
