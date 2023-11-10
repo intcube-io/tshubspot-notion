@@ -4,6 +4,8 @@ import * as _ from "lodash";
 
 import dotenv from "dotenv";
 import { assert } from "console";
+import { partitionMap } from "fp-ts/Array";
+import { Either, left, right } from 'fp-ts/Either'
 import { SimplePublicObjectWithAssociations } from "@hubspot/api-client/lib/codegen/crm/companies";
 
 dotenv.config();
@@ -112,28 +114,40 @@ async function main() {
     mapDealToPage[dealId] = dealPage.id;
   }
 
+  const upperIfString = <B>(x: B): Either<B, string> => (typeof x === 'string' ? right(x.toUpperCase()) : left(x))
+  partitionMap(upperIfString)([-2, 'hello', 6, 7, 'world']), {
+    left: [-2, 6, 7],
+    right: ['HELLO', 'WORLD'],
+  };
+  
+  
+
   console.log("Updating/creating Notion DB entries from Hubspot deals.");
-  // JS doesn't have a proper partitionWith, and lodash only _.partition.  We
-  // implement our own using tuples of arrays instead of the Either Monad.  Cf.
-  // Haskell:
+  // We use fp-ts' partitionMap which is equivalent to Haskell's partitionWith:
   //
   //     getPageOrDealId = if (hasPage deal) then Left (deal, getPage deal) else Right deal
   //     (pagesToUpdate, pagesToCreate) = partitionWith (getPageOrDealId) allDeals
-  const partitionWith = function <T, A, B>(
-    collection: T[],
-    decider: (acc: [A[], B[]], current: T) => [A[], B[]],
-  ): [A[], B[]] {
-    return collection.reduce(decider, [[], []]);
-  };
-  const [pagesToUpdate, pagesToCreate]: [
-    updatePage: { deal: SimplePublicObjectWithAssociations; pageId: string }[],
-    newPage: { deal: SimplePublicObjectWithAssociations }[],
-  ] = partitionWith(allDeals, (acc, deal) => {
-    mapDealToPage[deal.id]
-      ? acc[0].push({ pageId: mapDealToPage[deal.id], deal: deal })
-      : acc[1].push({ deal: deal });
-    return acc;
-  });
+  //
+  // This leverages the power of Monads to linearly iterate through the list, partitioning it,
+  // and also appending the pageId, if available.
+  //
+  // A call to partitionMap with the supplied partitioning function yields a new function which can
+  // be applied on its argument (the list/array), which makes for some unusual TypeScript syntax:
+  //
+  //     results = partitionMap(fn)(array);
+  //
+  // Perhaps more plainly:
+  //
+  //     applicator = partitionMap(fn);
+  //     results = applicator(array);
+  //
+  const {left: pagesToUpdate, right: pagesToCreate}: {
+    left: { deal: SimplePublicObjectWithAssociations; pageId: string }[], /* with additional pageId */
+    right: { deal: SimplePublicObjectWithAssociations }[],
+  } = partitionMap((deal: SimplePublicObjectWithAssociations) => {
+    const pageId = mapDealToPage[deal.id];
+    return pageId ? left({deal: deal, pageId: pageId}) : right({deal: deal});
+  })(allDeals);
 
   const OPERATION_BATCH_SIZE = 10;
   const pagesToUpdateChunked = _.chunk(pagesToUpdate, OPERATION_BATCH_SIZE);
