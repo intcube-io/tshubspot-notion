@@ -114,14 +114,6 @@ async function main() {
     mapDealToPage[dealId] = dealPage.id;
   }
 
-  const upperIfString = <B>(x: B): Either<B, string> => (typeof x === 'string' ? right(x.toUpperCase()) : left(x))
-  partitionMap(upperIfString)([-2, 'hello', 6, 7, 'world']), {
-    left: [-2, 6, 7],
-    right: ['HELLO', 'WORLD'],
-  };
-  
-  
-
   console.log("Updating/creating Notion DB entries from Hubspot deals.");
   // We use fp-ts' partitionMap which is equivalent to Haskell's partitionWith:
   //
