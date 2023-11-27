@@ -83,6 +83,7 @@ async function main() {
   console.log("Deleted properties from Hubspot:", deletedDatabaseKeys);
   dbSchemaUpToDate = dbSchemaUpToDate && newDatabaseKeys.size === 0 && deletedDatabaseKeys.size === 0;
   
+  if (!dbSchemaUpToDate) {
   const notionProjectDbSchema = await notion.databases.update({
     database_id: notionProjectDbId,
     properties: {
@@ -101,6 +102,7 @@ async function main() {
       },
     },
   });
+  }
 
 
   console.log("Matching existing Notion DB entries to Hubspot deals.");
