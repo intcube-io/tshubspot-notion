@@ -9,6 +9,7 @@ import { difference } from "fp-ts/Set";
 import { Either, left, right } from 'fp-ts/Either'
 import * as S from 'fp-ts/string'
 import { SimplePublicObjectWithAssociations } from "@hubspot/api-client/lib/codegen/crm/companies";
+import { UpdateDatabaseParameters } from "@notionhq/client/build/src/api-endpoints";
 
 dotenv.config();
 
@@ -65,28 +66,42 @@ async function main() {
   console.log("Getting all Hubspot deals.");
   const allDeals = await hubspot.crm.deals.getAll();
 
-  console.log("Ensuring/updating Notion DB schema.");
-  /* This is mostly a sanity check -- we don't keep track of the DB schema but override it
-   * with the data from Hubspot on each sync.  But the info can be useful for debugging :-) */
+  console.log("Comparing Notion and HubSpot DB schema.");
+  /* In order to override the Notion schema with the one from HubSpot we need to know
+   *  a) which keys are in HubSpot (regardless of whether they are already in Notion), and
+   *  b) which keys are in Notion but not in HubSpot
+   * The first information (a) is required to add these new keys (adding keys that already exist is a NOP).
+   * The second information (b) is required to delete those old keys.
+   * 
+   * In theory it doesn't matter if we update the database even if nothing changes,
+   * but it's useful for debugging purposes to still keep track of keys that are added,
+   * regardless of whether they already exist in Notion, and whether anything changed at all :-)
+   */
   let dbSchemaUpToDate = true;
+
   const currentProjectDbSchema = await notion.databases.retrieve({database_id: notionProjectDbId});
+
   const databaseKeys = new Set(Object.keys(currentProjectDbSchema.properties));
   const hubspotProperties = new Set(Object.keys(allDeals[0].properties));
-  /* This is already checked below but we'll still special-case this as this should only be true on first run! */
+
+  /* This is could already be checked below but we special-case this anyway as this should only be true on first run! */
   if (!(databaseKeys.has("Name")) || !(databaseKeys.has("hubspot_deal_id"))) {
     dbSchemaUpToDate = false;
     console.log("Keys 'Name' or 'hubspot_deal_id' missing in Notion DB -- first run?");
   }
+
+  /* Set diff of keys in HubSpot vs. Notion */
   const deletedDatabaseKeys = difference(S.Eq)(hubspotProperties.add("Name").add("hubspot_deal_id"))(databaseKeys);
   const newDatabaseKeys = difference(S.Eq)(databaseKeys)(hubspotProperties);
   console.log("New properties from Hubspot:", newDatabaseKeys);
   console.log("Deleted properties from Hubspot:", deletedDatabaseKeys);
-  dbSchemaUpToDate = dbSchemaUpToDate && newDatabaseKeys.size === 0 && deletedDatabaseKeys.size === 0;
   
-  if (!dbSchemaUpToDate) {
-    const notionProjectDbSchema = await notion.databases.update({
-      database_id: notionProjectDbId,
-      properties: {
+  dbSchemaUpToDate = dbSchemaUpToDate && newDatabaseKeys.size === 0 && deletedDatabaseKeys.size === 0;
+  if (dbSchemaUpToDate) {
+    console.log("Notion DB schema up to date.")
+  } else {
+    console.log("Updating Notion DB schema.")
+    const the_properties: UpdateDatabaseParameters["properties"] = {
         Name: {
           title: {},
         },
@@ -100,8 +115,25 @@ async function main() {
           name: "hubspot_deal_id",
           url: {},
         },
-      },
+    };
+    /* As mentioned earlier, we could just add *all* keys from HubSpot as adding keys here
+     * that already exist in Notion results in a NOP.
+     */
+    for (let [prop,_] of newDatabaseKeys.entries()) {
+      the_properties[prop] = {
+        type: "rich_text",
+        rich_text: {}
+      }
+    }
+    for (let [delProp,_] of deletedDatabaseKeys.entries()) {
+      the_properties[delProp] = null;
+    }
+
+    const notionProjectDbSchema = await notion.databases.update({
+      database_id: notionProjectDbId,
+      properties: the_properties,
     });
+    console.log("New Notion DB schema: ", notionProjectDbSchema.properties)
   }
 
 
