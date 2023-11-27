@@ -9,7 +9,7 @@ import { difference } from "fp-ts/Set";
 import { Either, left, right } from 'fp-ts/Either'
 import * as S from 'fp-ts/string'
 import { SimplePublicObjectWithAssociations } from "@hubspot/api-client/lib/codegen/crm/companies";
-import { UpdateDatabaseParameters } from "@notionhq/client/build/src/api-endpoints";
+import { UpdatePageParameters, UpdateDatabaseParameters, CreatePageParameters } from "@notionhq/client/build/src/api-endpoints";
 
 dotenv.config();
 
@@ -195,13 +195,13 @@ async function main() {
     return pageId ? left({deal: deal, pageId: pageId}) : right({deal: deal});
   })(allDeals);
 
+  /* 3. Write new data online */
   const OPERATION_BATCH_SIZE = 10;
   const pagesToUpdateChunked = _.chunk(pagesToUpdate, OPERATION_BATCH_SIZE);
   for (let pageBatch of pagesToUpdateChunked) {
     await Promise.all(
       pageBatch.map((page) => {
-        /* TODO: how to use this below? */
-        const the_properties = {
+        const the_properties: UpdatePageParameters["properties"] = {
           Name: {
             title: [
               {
@@ -216,25 +216,17 @@ async function main() {
             url: hubspotDealIdToURL(HUBSPOT_PORTAL_ID, page.deal.id),
           },
         };
+        for (let prop in page.deal.properties) {
+          the_properties[prop] = {
+            type: "rich_text",
+            rich_text: [{ text: { content: page.deal.properties[prop] ?? "" } }],
+          }
+        }
 
         console.log("Updating deal", page.deal.id);
         return notion.pages.update({
           page_id: page.pageId,
-          properties: {
-            Name: {
-              title: [
-                {
-                  text: {
-                    content: page.deal.properties.dealname!,
-                  },
-                },
-              ],
-            },
-            hubspot_deal_id: {
-              type: "url",
-              url: hubspotDealIdToURL(HUBSPOT_PORTAL_ID, page.deal.id),
-            },
-          },
+          properties: the_properties,
         });
       }),
     );
@@ -244,27 +236,35 @@ async function main() {
   for (let pageBatch of pagesToCreateChunked) {
     await Promise.all(
       pageBatch.map((page) => {
+        const the_properties: CreatePageParameters["properties"] = {
+          Name: {
+            title: [
+              {
+                text: {
+                  content: page.deal.properties.dealname!,
+                },
+              },
+            ],
+          },
+          hubspot_deal_id: {
+            type: "url",
+            url: hubspotDealIdToURL(HUBSPOT_PORTAL_ID, page.deal.id),
+          },
+        };
+        for (let prop in page.deal.properties) {
+          the_properties[prop] = {
+            type: "rich_text",
+            rich_text: [{ text: { content: page.deal.properties[prop] ?? "" } }],
+          }
+        }
+
         console.log("Creating deal", page.deal.id);
         return notion.pages.create({
           parent: {
             type: "database_id",
             database_id: notionProjectDbId,
           },
-          properties: {
-            Name: {
-              title: [
-                {
-                  text: {
-                    content: page.deal.properties.dealname!,
-                  },
-                },
-              ],
-            },
-            hubspot_deal_id: {
-              type: "url",
-              url: hubspotDealIdToURL(HUBSPOT_PORTAL_ID, page.deal.id),
-            },
-          },
+          properties: the_properties,
         });
       }),
     );
