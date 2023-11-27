@@ -5,7 +5,9 @@ import * as _ from "lodash";
 import dotenv from "dotenv";
 import { assert } from "console";
 import { partitionMap } from "fp-ts/Array";
+import { difference } from "fp-ts/Set";
 import { Either, left, right } from 'fp-ts/Either'
+import * as S from 'fp-ts/string'
 import { SimplePublicObjectWithAssociations } from "@hubspot/api-client/lib/codegen/crm/companies";
 
 dotenv.config();
@@ -64,6 +66,23 @@ async function main() {
   const allDeals = await hubspot.crm.deals.getAll();
 
   console.log("Ensuring/updating Notion DB schema.");
+  /* This is mostly a sanity check -- we don't keep track of the DB schema but override it
+   * with the data from Hubspot on each sync.  But the info can be useful for debugging :-) */
+  let dbSchemaUpToDate = true;
+  const currentProjectDbSchema = await notion.databases.retrieve({database_id: notionProjectDbId});
+  const databaseKeys = new Set(Object.keys(currentProjectDbSchema.properties));
+  const hubspotProperties = new Set(Object.keys(allDeals[0].properties));
+  /* This is already checked below but we'll still special-case this as this should only be true on first run! */
+  if (!(databaseKeys.has("Name")) || !(databaseKeys.has("hubspot_deal_id"))) {
+    dbSchemaUpToDate = false;
+    console.log("Keys 'Name' or 'hubspot_deal_id' missing in Notion DB -- first run?");
+  }
+  const deletedDatabaseKeys = difference(S.Eq)(hubspotProperties.add("Name").add("hubspot_deal_id"))(databaseKeys);
+  const newDatabaseKeys = difference(S.Eq)(databaseKeys)(hubspotProperties);
+  console.log("New properties from Hubspot:", newDatabaseKeys);
+  console.log("Deleted properties from Hubspot:", deletedDatabaseKeys);
+  dbSchemaUpToDate = dbSchemaUpToDate && newDatabaseKeys.size === 0 && deletedDatabaseKeys.size === 0;
+  
   const notionProjectDbSchema = await notion.databases.update({
     database_id: notionProjectDbId,
     properties: {
