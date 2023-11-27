@@ -55,6 +55,14 @@ async function main() {
 
   const notionProjectDbId = process.env.NOTION_INTCUBE_PROJECT_DB!;
 
+  console.log("Querying Notion project DB rows.");
+  const notionProjectDb = await notion.databases.query({
+    database_id: notionProjectDbId,
+  });
+
+  console.log("Getting all Hubspot deals.");
+  const allDeals = await hubspot.crm.deals.getAll();
+
   console.log("Ensuring/updating Notion DB schema.");
   const notionProjectDbSchema = await notion.databases.update({
     database_id: notionProjectDbId,
@@ -75,13 +83,6 @@ async function main() {
     },
   });
 
-  console.log("Querying Notion project DB rows.");
-  const notionProjectDb = await notion.databases.query({
-    database_id: notionProjectDbId,
-  });
-
-  console.log("Getting all Hubspot deals.");
-  const allDeals = await hubspot.crm.deals.getAll();
 
   console.log("Matching existing Notion DB entries to Hubspot deals.");
   let mapDealToPage: { [id: string]: string } = {};
