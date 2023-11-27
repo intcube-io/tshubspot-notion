@@ -84,24 +84,24 @@ async function main() {
   dbSchemaUpToDate = dbSchemaUpToDate && newDatabaseKeys.size === 0 && deletedDatabaseKeys.size === 0;
   
   if (!dbSchemaUpToDate) {
-  const notionProjectDbSchema = await notion.databases.update({
-    database_id: notionProjectDbId,
-    properties: {
-      Name: {
-        title: {},
+    const notionProjectDbSchema = await notion.databases.update({
+      database_id: notionProjectDbId,
+      properties: {
+        Name: {
+          title: {},
+        },
+        /* Uses type Record<string, url-property>, where the key in the record
+        * must match the `name` in the url-property, otherwise this will be read
+        * as an "update name" request, updating any property matched by the key
+        * in the record to have the new name indicated by `name`.
+        */
+        hubspot_deal_id: {
+          type: "url",
+          name: "hubspot_deal_id",
+          url: {},
+        },
       },
-      /* Uses type Record<string, url-property>, where the key in the record
-       * must match the `name` in the url-property, otherwise this will be read
-       * as an "update name" request, updating any property matched by the key
-       * in the record to have the new name indicated by `name`.
-       */
-      hubspot_deal_id: {
-        type: "url",
-        name: "hubspot_deal_id",
-        url: {},
-      },
-    },
-  });
+    });
   }
 
 
