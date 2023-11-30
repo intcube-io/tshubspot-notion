@@ -63,6 +63,7 @@ async function main() {
 
   const notionProjectDbId = process.env.NOTION_INTCUBE_PROJECT_DB!;
 
+  /* 1. Get current state of affairs */
   console.log("Querying Notion project DB rows.");
   const notionProjectDb = await collectPaginatedAPI(notion.databases.query, {
     database_id: notionProjectDbId,
@@ -71,6 +72,7 @@ async function main() {
   console.log("Getting all Hubspot deals.");
   const allDeals = await hubspot.crm.deals.getAll();
 
+  /* 2. DB Schema diff */
   console.log("Comparing Notion and HubSpot DB schema.");
   /* In order to override the Notion schema with the one from HubSpot we need to know
    *  a) which keys are in HubSpot (regardless of whether they are already in Notion), and
@@ -150,7 +152,7 @@ async function main() {
     console.log("New Notion DB schema: ", notionProjectDbSchema.properties);
   }
 
-
+  /* 3. Local work */
   console.log("Matching existing Notion DB entries to Hubspot deals.");
   let mapDealToPage: { [id: string]: string } = {};
   for (let dealPage of notionProjectDb) {
