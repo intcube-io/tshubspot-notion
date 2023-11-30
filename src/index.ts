@@ -1,4 +1,5 @@
 import { Client as NotionClient } from "@notionhq/client";
+import { collectPaginatedAPI } from "@notionhq/client"
 import { Client as HubspotClient } from "@hubspot/api-client";
 import * as _ from "lodash";
 
@@ -63,7 +64,7 @@ async function main() {
   const notionProjectDbId = process.env.NOTION_INTCUBE_PROJECT_DB!;
 
   console.log("Querying Notion project DB rows.");
-  const notionProjectDb = await notion.databases.query({
+  const notionProjectDb = await collectPaginatedAPI(notion.databases.query, {
     database_id: notionProjectDbId,
   });
 
@@ -152,7 +153,7 @@ async function main() {
 
   console.log("Matching existing Notion DB entries to Hubspot deals.");
   let mapDealToPage: { [id: string]: string } = {};
-  for (let dealPage of notionProjectDb.results) {
+  for (let dealPage of notionProjectDb) {
     // prettier-ignore
     assert(dealPage.object === "page", "notionProjectdb object '" + dealPage.id + "' isn't a page: " + dealPage.object);
 
