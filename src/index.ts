@@ -154,7 +154,7 @@ async function main() {
 
   /* 3. Local work */
   console.log("Matching existing Notion DB entries to Hubspot deals.");
-  let mapDealToPage: { [id: string]: string } = {};
+  let mapDealToPage = new Map<string, string>;
   for (let dealPage of notionProjectDb) {
     // prettier-ignore
     assert(dealPage.object === "page", "notionProjectdb object '" + dealPage.id + "' isn't a page: " + dealPage.object);
@@ -181,7 +181,7 @@ async function main() {
       HUBSPOT_PORTAL_ID,
       dealPage.properties.hubspot_deal_id.url,
     );
-    mapDealToPage[dealId] = dealPage.id;
+    mapDealToPage.set(dealId,dealPage.id);
   }
 
   console.log("Updating/creating Notion DB entries from Hubspot deals.");
@@ -213,7 +213,7 @@ async function main() {
     }[] /* with additional pageId */;
     right: { deal: SimplePublicObjectWithAssociations }[];
   } = partitionMap((deal: SimplePublicObjectWithAssociations) => {
-    const pageId = mapDealToPage[deal.id];
+    const pageId = mapDealToPage.get(deal.id);
     return pageId
       ? left({ deal: deal, pageId: pageId })
       : right({ deal: deal });
