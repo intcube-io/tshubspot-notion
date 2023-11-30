@@ -1,12 +1,20 @@
 import { Client as NotionClient } from "@notionhq/client";
+import { collectPaginatedAPI } from "@notionhq/client"
 import { Client as HubspotClient } from "@hubspot/api-client";
 import * as _ from "lodash";
 
 import dotenv from "dotenv";
 import { assert } from "console";
 import { partitionMap } from "fp-ts/Array";
-import { Either, left, right } from 'fp-ts/Either'
+import { difference } from "fp-ts/Set";
+import { Either, left, right } from "fp-ts/Either";
+import * as S from "fp-ts/string";
 import { SimplePublicObjectWithAssociations } from "@hubspot/api-client/lib/codegen/crm/companies";
+import {
+  UpdatePageParameters,
+  UpdateDatabaseParameters,
+  CreatePageParameters,
+} from "@notionhq/client/build/src/api-endpoints";
 
 dotenv.config();
 
@@ -55,10 +63,61 @@ async function main() {
 
   const notionProjectDbId = process.env.NOTION_INTCUBE_PROJECT_DB!;
 
-  console.log("Ensuring/updating Notion DB schema.");
-  const notionProjectDbSchema = await notion.databases.update({
+  /* 1. Get current state of affairs */
+  console.log("Querying Notion project DB rows.");
+  const notionProjectDb = await collectPaginatedAPI(notion.databases.query, {
     database_id: notionProjectDbId,
-    properties: {
+  });
+
+  console.log("Getting all Hubspot deals.");
+  const allDeals = await hubspot.crm.deals.getAll();
+
+  /* 2. DB Schema diff */
+  console.log("Comparing Notion and HubSpot DB schema.");
+  /* In order to override the Notion schema with the one from HubSpot we need to know
+   *  a) which keys are in HubSpot (regardless of whether they are already in Notion), and
+   *  b) which keys are in Notion but not in HubSpot
+   * The first information (a) is required to add these new keys (adding keys that already exist is a NOP).
+   * The second information (b) is required to delete those old keys.
+   *
+   * In theory it doesn't matter if we update the database even if nothing changes,
+   * but it's useful for debugging purposes to still keep track of keys that are added,
+   * regardless of whether they already exist in Notion, and whether anything changed at all :-)
+   */
+  let dbSchemaUpToDate = true;
+
+  const currentProjectDbSchema = await notion.databases.retrieve({
+    database_id: notionProjectDbId,
+  });
+
+  const databaseKeys = new Set(Object.keys(currentProjectDbSchema.properties));
+  const hubspotProperties = new Set(Object.keys(allDeals[0].properties));
+
+  /* This is could already be checked below but we special-case this anyway as this should only be true on first run! */
+  if (!databaseKeys.has("Name") || !databaseKeys.has("hubspot_deal_id")) {
+    dbSchemaUpToDate = false;
+    console.log(
+      "Keys 'Name' or 'hubspot_deal_id' missing in Notion DB -- first run?",
+    );
+  }
+
+  /* Set diff of keys in HubSpot vs. Notion */
+  const deletedDatabaseKeys = difference(S.Eq)(
+    hubspotProperties.add("Name").add("hubspot_deal_id"),
+  )(databaseKeys);
+  const newDatabaseKeys = difference(S.Eq)(databaseKeys)(hubspotProperties);
+  console.log("New properties from Hubspot:", newDatabaseKeys);
+  console.log("Deleted properties from Hubspot:", deletedDatabaseKeys);
+
+  dbSchemaUpToDate =
+    dbSchemaUpToDate &&
+    newDatabaseKeys.size === 0 &&
+    deletedDatabaseKeys.size === 0;
+  if (dbSchemaUpToDate) {
+    console.log("Notion DB schema up to date.");
+  } else {
+    console.log("Updating Notion DB schema.");
+    const the_properties: UpdateDatabaseParameters["properties"] = {
       Name: {
         title: {},
       },
@@ -72,20 +131,31 @@ async function main() {
         name: "hubspot_deal_id",
         url: {},
       },
-    },
-  });
+    };
+    /* As mentioned earlier, we could just add *all* keys from HubSpot as adding keys here
+     * that already exist in Notion results in a NOP.
+     */
+    for (let [prop, _] of newDatabaseKeys.entries()) {
+      the_properties[prop] = {
+        type: "rich_text",
+        rich_text: {},
+      };
+    }
+    for (let [delProp, _] of deletedDatabaseKeys.entries()) {
+      the_properties[delProp] = null;
+    }
 
-  console.log("Querying Notion project DB rows.");
-  const notionProjectDb = await notion.databases.query({
-    database_id: notionProjectDbId,
-  });
+    const notionProjectDbSchema = await notion.databases.update({
+      database_id: notionProjectDbId,
+      properties: the_properties,
+    });
+    console.log("New Notion DB schema: ", notionProjectDbSchema.properties);
+  }
 
-  console.log("Getting all Hubspot deals.");
-  const allDeals = await hubspot.crm.deals.getAll();
-
+  /* 3. Local work */
   console.log("Matching existing Notion DB entries to Hubspot deals.");
-  let mapDealToPage: { [id: string]: string } = {};
-  for (let dealPage of notionProjectDb.results) {
+  let mapDealToPage = new Map<string, string>;
+  for (let dealPage of notionProjectDb) {
     // prettier-ignore
     assert(dealPage.object === "page", "notionProjectdb object '" + dealPage.id + "' isn't a page: " + dealPage.object);
 
@@ -107,11 +177,21 @@ async function main() {
       });
       continue;
     }
+
     const dealId = hubspotUrlToId(
       HUBSPOT_PORTAL_ID,
       dealPage.properties.hubspot_deal_id.url,
     );
-    mapDealToPage[dealId] = dealPage.id;
+    if (mapDealToPage.has(dealId)) {
+      console.log("Page", dealPage.id, "is duplicate; archiving");
+      await notion.pages.update({
+        page_id: dealPage.id,
+        archived: true,
+      });
+      continue;
+    }
+
+    mapDealToPage.set(dealId,dealPage.id);
   }
 
   console.log("Updating/creating Notion DB entries from Hubspot deals.");
@@ -133,21 +213,29 @@ async function main() {
   //     applicator = partitionMap(fn);
   //     results = applicator(array);
   //
-  const {left: pagesToUpdate, right: pagesToCreate}: {
-    left: { deal: SimplePublicObjectWithAssociations; pageId: string }[], /* with additional pageId */
-    right: { deal: SimplePublicObjectWithAssociations }[],
+  const {
+    left: pagesToUpdate,
+    right: pagesToCreate,
+  }: {
+    left: {
+      deal: SimplePublicObjectWithAssociations;
+      pageId: string;
+    }[] /* with additional pageId */;
+    right: { deal: SimplePublicObjectWithAssociations }[];
   } = partitionMap((deal: SimplePublicObjectWithAssociations) => {
-    const pageId = mapDealToPage[deal.id];
-    return pageId ? left({deal: deal, pageId: pageId}) : right({deal: deal});
+    const pageId = mapDealToPage.get(deal.id);
+    return pageId
+      ? left({ deal: deal, pageId: pageId })
+      : right({ deal: deal });
   })(allDeals);
 
+  /* 3. Write new data online */
   const OPERATION_BATCH_SIZE = 10;
   const pagesToUpdateChunked = _.chunk(pagesToUpdate, OPERATION_BATCH_SIZE);
   for (let pageBatch of pagesToUpdateChunked) {
     await Promise.all(
       pageBatch.map((page) => {
-        /* TODO: how to use this below? */
-        const the_properties = {
+        const the_properties: UpdatePageParameters["properties"] = {
           Name: {
             title: [
               {
@@ -162,25 +250,19 @@ async function main() {
             url: hubspotDealIdToURL(HUBSPOT_PORTAL_ID, page.deal.id),
           },
         };
+        for (let prop in page.deal.properties) {
+          the_properties[prop] = {
+            type: "rich_text",
+            rich_text: [
+              { text: { content: page.deal.properties[prop] ?? "" } },
+            ],
+          };
+        }
 
         console.log("Updating deal", page.deal.id);
         return notion.pages.update({
           page_id: page.pageId,
-          properties: {
-            Name: {
-              title: [
-                {
-                  text: {
-                    content: page.deal.properties.dealname!,
-                  },
-                },
-              ],
-            },
-            hubspot_deal_id: {
-              type: "url",
-              url: hubspotDealIdToURL(HUBSPOT_PORTAL_ID, page.deal.id),
-            },
-          },
+          properties: the_properties,
         });
       }),
     );
@@ -190,27 +272,37 @@ async function main() {
   for (let pageBatch of pagesToCreateChunked) {
     await Promise.all(
       pageBatch.map((page) => {
+        const the_properties: CreatePageParameters["properties"] = {
+          Name: {
+            title: [
+              {
+                text: {
+                  content: page.deal.properties.dealname!,
+                },
+              },
+            ],
+          },
+          hubspot_deal_id: {
+            type: "url",
+            url: hubspotDealIdToURL(HUBSPOT_PORTAL_ID, page.deal.id),
+          },
+        };
+        for (let prop in page.deal.properties) {
+          the_properties[prop] = {
+            type: "rich_text",
+            rich_text: [
+              { text: { content: page.deal.properties[prop] ?? "" } },
+            ],
+          };
+        }
+
         console.log("Creating deal", page.deal.id);
         return notion.pages.create({
           parent: {
             type: "database_id",
             database_id: notionProjectDbId,
           },
-          properties: {
-            Name: {
-              title: [
-                {
-                  text: {
-                    content: page.deal.properties.dealname!,
-                  },
-                },
-              ],
-            },
-            hubspot_deal_id: {
-              type: "url",
-              url: hubspotDealIdToURL(HUBSPOT_PORTAL_ID, page.deal.id),
-            },
-          },
+          properties: the_properties,
         });
       }),
     );
