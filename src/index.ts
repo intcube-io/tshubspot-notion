@@ -177,10 +177,20 @@ async function main() {
       });
       continue;
     }
+
     const dealId = hubspotUrlToId(
       HUBSPOT_PORTAL_ID,
       dealPage.properties.hubspot_deal_id.url,
     );
+    if (mapDealToPage.has(dealId)) {
+      console.log("Page", dealPage.id, "is duplicate; archiving");
+      await notion.pages.update({
+        page_id: dealPage.id,
+        archived: true,
+      });
+      continue;
+    }
+
     mapDealToPage.set(dealId,dealPage.id);
   }
 
